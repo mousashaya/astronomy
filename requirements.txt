@@ -1,0 +1,11 @@
+numpy
+scipy
+astropy
+pyvo
+treecorr
+pyccl
+clmm
+healpy
+matplotlib
+pandas
+pyarrow
