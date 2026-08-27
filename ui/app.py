@@ -5,10 +5,10 @@ Run with:
     streamlit run ui/app.py
 
 Stages 1 (TNS discovery), 2 (light curve retrieval), 3 (quality check),
-and 4 (SALT2 fitting) exist so far. Later stages — standardization, the
-Hubble diagram — will each get their own `st.header(...)` section
-appended below as we build them, so this file grows one stage at a time
-rather than being rewritten each time.
+4 (SALT2 fitting), and 5 (standardization) exist so far. The Hubble
+diagram is next — it'll get its own `st.header(...)` section appended
+below as we build it, so this file grows one stage at a time rather than
+being rewritten each time.
 """
 import sys
 from pathlib import Path
@@ -25,6 +25,7 @@ from desc_demo.sn_discovery import find_sn_ia_candidates, naive_distance_gly
 from desc_demo.sn_photometry import fetch_light_curve, plot_light_curve
 from desc_demo.sn_quality import check_light_curve
 from desc_demo.sn_fitting import fit_salt2, plot_fit
+from desc_demo.sn_standardization import distance_modulus_to_gly, standardize
 
 st.set_page_config(page_title="DESC demo: SN Ia pipeline", layout="wide")
 st.title("SN Ia pipeline — live view")
@@ -199,3 +200,27 @@ if candidates is not None:
                         # green/red arrow styling would be misleading here.
                         col.metric(name, f"{fit.params[name]:.4g}", f"± {fit.errors[name]:.2g}", delta_color="off")
                     st.pyplot(plot_fit(light_curve, fit))
+
+                    st.header("Stage 5 — Standardized distance")
+                    st.caption(
+                        "Tripp/Phillips formula: μ = m_B − M_B + α·x1 − β·c. "
+                        "α, β, M_B are fixed literature constants (not "
+                        "derived from our own data) — see "
+                        "src/desc_demo/sn_standardization.py for why, and "
+                        "for the honest limitation that implies."
+                    )
+                    dist = standardize(fit)
+                    # naive_distance_gly is pure elementwise arithmetic, so
+                    # it works fine on a plain float too, not just a Series.
+                    naive_gly = naive_distance_gly(row["f:redshift"])
+                    salt2_gly = distance_modulus_to_gly(dist.mu)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("m_B (peak)", f"{dist.m_b:.3f}")
+                    c2.metric("μ (distance modulus)", f"{dist.mu:.3f}", f"± {dist.mu_err:.3f}", delta_color="off")
+                    c3.metric("implied distance", f"{salt2_gly:.2f} Gly")
+                    st.caption(
+                        f"Sanity check against the naive z-only estimate "
+                        f"from Stage 1: {naive_gly:.2f} Gly. These won't "
+                        f"match exactly (different methods, generic α/β/M_B) "
+                        f"but should be in the same ballpark."
+                    )
