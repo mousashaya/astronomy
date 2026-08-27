@@ -5,10 +5,9 @@ Run with:
     streamlit run ui/app.py
 
 Stages 1 (TNS discovery), 2 (light curve retrieval), 3 (quality check),
-4 (SALT2 fitting), and 5 (standardization) exist so far. The Hubble
-diagram is next — it'll get its own `st.header(...)` section appended
-below as we build it, so this file grows one stage at a time rather than
-being rewritten each time.
+4 (SALT2 fitting), 5 (standardization), and 6 (Hubble diagram) exist so
+far — this file grew one stage at a time as we built them, and each
+section keeps the comments explaining why it works the way it does.
 """
 import sys
 from pathlib import Path
@@ -26,6 +25,7 @@ from desc_demo.sn_photometry import fetch_light_curve, plot_light_curve
 from desc_demo.sn_quality import check_light_curve
 from desc_demo.sn_fitting import fit_salt2, plot_fit
 from desc_demo.sn_standardization import distance_modulus_to_gly, standardize
+from desc_demo.sn_hubble import build_hubble_sample, plot_hubble_diagram
 
 st.set_page_config(page_title="DESC demo: SN Ia pipeline", layout="wide")
 st.title("SN Ia pipeline — live view")
@@ -234,3 +234,47 @@ if candidates is not None:
                         f"match exactly (different methods, generic α/β/M_B) "
                         f"but should be in the same ballpark."
                     )
+
+    st.header("Stage 6 — Hubble diagram")
+    st.caption(
+        "Runs Stages 2-5 across a batch of candidates (not just the one "
+        "selected above), keeps whichever ones make it through cleanly, "
+        "and plots (z, μ) against CCL theory curves for different "
+        "Ωm/w0 — the same CCL usage pattern as the weak-lensing demo's "
+        "shear_tomography.py. This is the actual dark-energy-sensitive "
+        "comparison; a single object's distance (Stage 5) isn't."
+    )
+    n_batch = st.slider(
+        "How many candidates to run through the full pipeline", 10, 100, 40, step=10,
+        help="Each one takes a few seconds (light curve + fit), so this is capped for interactivity.",
+    )
+    if st.button("Build Hubble diagram"):
+        with st.spinner(f"Running the full pipeline on {n_batch} candidates..."):
+            st.session_state["hubble_sample"] = build_hubble_sample(candidates.head(n_batch))
+
+    hubble_sample = st.session_state.get("hubble_sample")
+    if hubble_sample is not None:
+        if hubble_sample.empty:
+            st.warning("None of these candidates made it through all 5 stages.")
+        else:
+            st.write(f"{len(hubble_sample)} / {n_batch} candidates made it through all 5 stages cleanly.")
+            st.pyplot(plot_hubble_diagram(hubble_sample))
+            st.caption(
+                "Notice the theory curves are nearly on top of each other — "
+                "that's real, not a bug: at these redshifts (z < ~0.1), "
+                "different Ωm/w0 values barely change the predicted "
+                "distance yet. Dark energy's effect only becomes visually "
+                "distinguishable at higher z, which is exactly why LSST "
+                "needs to go deeper than ZTF, not a limitation of this "
+                "pipeline specifically."
+            )
+            st.dataframe(
+                hubble_sample.sort_values("chisq_dof", ascending=False),
+                width="stretch",
+            )
+            st.caption(
+                "Sorted worst-fit first — χ²/dof well above 1 is worth "
+                "distrusting even if it made it through Stage 3's checks; "
+                "Stage 3 checks the light curve's shape, not the fit's "
+                "actual goodness, so the two catch different problems."
+            )
