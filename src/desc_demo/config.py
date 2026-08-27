@@ -22,6 +22,24 @@ for _d in (RAW_DIR, PROCESSED_DIR, FIGURES_DIR):
 # NOIRLab Data Lab TAP service — public, no auth required for DR1 tables.
 DATALAB_TAP_URL = "https://datalab.noirlab.edu/tap"
 
+# Fink runs separate infrastructure per survey (ZTF vs LSST alerts are
+# different data, processed and stored independently) — so there are two
+# API hosts. The TNS resolver (sn_discovery.py) happens to work on either,
+# since TNS itself isn't survey-specific, but anything object-level —
+# photometry, cutouts (sn_cutouts.py) — has to hit the host that actually
+# has that survey's alerts.
+FINK_LSST_API_URL = "https://api.lsst.fink-portal.org/api/v1"
+FINK_ZTF_API_URL = "https://api.ztf.fink-portal.org/api/v1"
+
+# Kept as an alias for the resolver call in sn_discovery.py, which doesn't
+# care which host it hits.
+FINK_API_URL = FINK_LSST_API_URL
+
+# TNS classification string we treat as "confirmed SN Ia" for the discovery
+# pipeline. Kept as a named constant (not a literal buried in a filter) so
+# it's a one-line change later to widen this to subtypes like "SN Ia-91bg".
+TNS_SN_IA_TYPE = "SN Ia"
+
 
 @dataclass(frozen=True)
 class ClusterTarget:

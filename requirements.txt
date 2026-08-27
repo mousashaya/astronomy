@@ -9,3 +9,6 @@ healpy
 matplotlib
 pandas
 pyarrow
+requests
+streamlit
+pillow
