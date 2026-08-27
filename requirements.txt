@@ -13,3 +13,4 @@ requests
 streamlit
 pillow
 sncosmo
+iminuit

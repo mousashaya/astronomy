@@ -4,11 +4,11 @@ stage gets built, instead of reading terminal output.
 Run with:
     streamlit run ui/app.py
 
-Stages 1 (TNS discovery), 2 (light curve retrieval), and 3 (quality
-check) exist so far. Later stages — SALT2 fitting, the Hubble diagram —
-will each get their own `st.header(...)` section appended below as we
-build them, so this file grows one stage at a time rather than being
-rewritten each time.
+Stages 1 (TNS discovery), 2 (light curve retrieval), 3 (quality check),
+and 4 (SALT2 fitting) exist so far. Later stages — standardization, the
+Hubble diagram — will each get their own `st.header(...)` section
+appended below as we build them, so this file grows one stage at a time
+rather than being rewritten each time.
 """
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ from desc_demo.sn_cutouts import CUTOUT_KINDS, FinkUnavailable, fetch_cutouts, r
 from desc_demo.sn_discovery import find_sn_ia_candidates, naive_distance_gly
 from desc_demo.sn_photometry import fetch_light_curve, plot_light_curve
 from desc_demo.sn_quality import check_light_curve
+from desc_demo.sn_fitting import fit_salt2, plot_fit
 
 st.set_page_config(page_title="DESC demo: SN Ia pipeline", layout="wide")
 st.title("SN Ia pipeline — live view")
@@ -174,3 +175,27 @@ if candidates is not None:
                 st.success("Passes all checks — worth handing to Stage 4's SALT2 fit.")
             else:
                 st.error("Not fittable:\n" + "\n".join(f"- {r}" for r in quality.reasons))
+
+            if quality.is_fittable:
+                st.header("Stage 4 — SALT2 fit")
+                st.caption(
+                    "Redshift is fixed at the TNS spectroscopic value — "
+                    "the fitter only solves for t0 (time of peak), x0 "
+                    "(amplitude), x1 (stretch), and c (color). χ²/dof "
+                    "near 1 means the model fits within the data's own "
+                    "uncertainties; much bigger means a poor fit."
+                )
+                with st.spinner("Fitting SALT2..."):
+                    fit = fit_salt2(light_curve, redshift=row["f:redshift"])
+
+                if not fit.success:
+                    st.error("Fit did not converge.")
+                else:
+                    st.write(f"χ²/dof = {fit.chisq:.2f} / {fit.ndof} = {fit.chisq/fit.ndof:.2f}")
+                    cols = st.columns(4)
+                    for col, name in zip(cols, ["t0", "x0", "x1", "c"]):
+                        # delta_color="off": this is an uncertainty, not a
+                        # positive/negative change — st.metric's default
+                        # green/red arrow styling would be misleading here.
+                        col.metric(name, f"{fit.params[name]:.4g}", f"± {fit.errors[name]:.2g}", delta_color="off")
+                    st.pyplot(plot_fit(light_curve, fit))
