@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "desc-demo"
 version = "0.1.0"
-description = "Weak-lensing dark matter + dark energy demo built on public DES DR1 data"
+description = "LSST DESC demo: weak lensing (DES DR1) + SN Ia Hubble diagram (Fink/ZTF), dark matter and dark energy"
 requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
