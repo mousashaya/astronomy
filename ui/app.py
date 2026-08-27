@@ -4,10 +4,11 @@ stage gets built, instead of reading terminal output.
 Run with:
     streamlit run ui/app.py
 
-Only Stage 1 (TNS discovery) exists so far. Later stages — photometry
-retrieval, SALT2 fitting, the Hubble diagram — will each get their own
-`st.header(...)` section appended below as we build them, so this file
-grows one stage at a time rather than being rewritten each time.
+Stages 1 (TNS discovery), 2 (light curve retrieval), and 3 (quality
+check) exist so far. Later stages — SALT2 fitting, the Hubble diagram —
+will each get their own `st.header(...)` section appended below as we
+build them, so this file grows one stage at a time rather than being
+rewritten each time.
 """
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ import streamlit as st
 
 from desc_demo.sn_cutouts import CUTOUT_KINDS, FinkUnavailable, fetch_cutouts, render_cutout
 from desc_demo.sn_discovery import find_sn_ia_candidates, naive_distance_gly
+from desc_demo.sn_photometry import fetch_light_curve, plot_light_curve
+from desc_demo.sn_quality import check_light_curve
 
 st.set_page_config(page_title="DESC demo: SN Ia pipeline", layout="wide")
 st.title("SN Ia pipeline — live view")
@@ -125,3 +128,49 @@ if candidates is not None:
                 with col:
                     st.caption(kind)
                     st.image(render_cutout(cutouts[kind]), width="stretch")
+
+        st.header(f"Light curve — {row['f:fullname']} ({object_id})")
+        st.caption(
+            "Every archived alert for this object, not just the newest "
+            "one — magnitude vs. time, one color per band. A real SN Ia "
+            "fades within a few months; a light curve spanning years is "
+            "a sign this position has other, unrelated variability mixed "
+            "in (see src/desc_demo/sn_photometry.py's module docstring)."
+        )
+
+        light_curve = fetch_light_curve(object_id)
+        if light_curve.empty:
+            st.warning("No photometry available for this object.")
+        else:
+            span_days = light_curve["time"].max() - light_curve["time"].min()
+            st.write(
+                f"{len(light_curve)} points across "
+                f"{sorted(light_curve['band'].unique())}, spanning "
+                f"{span_days:.0f} days (first point to last — NOT how "
+                f"densely it was sampled in between, see below)"
+            )
+            st.pyplot(plot_light_curve(light_curve, title=row["f:fullname"]))
+
+            st.markdown(
+                "**Column reference**\n"
+                "- `time` — MJD (days since a fixed reference date, astronomy's plain day-counter)\n"
+                "- `band` — ztfg (green) / ztfr (red) / ztfi filter used\n"
+                "- `flux`, `fluxerr` — brightness on our own internal scale; what the SALT2 fit will actually use, not a physical unit\n"
+                "- `zp`, `zpsys` — the fixed reference point (25.0, AB system) flux is expressed relative to — same for every row by design\n"
+                "- `mag`, `magerr` — the real, physically-calibrated apparent magnitude — what's actually plotted above\n"
+                "- `rb` — real-bogus score (0-1): ZTF's own confidence this detection is a genuine source, not an artifact; higher is more trustworthy"
+            )
+            st.dataframe(light_curve, width="stretch")
+
+            st.header("Stage 3 — Quality check")
+            st.caption(
+                "Every threshold here was picked against real objects we "
+                "pulled and looked at, not chosen abstractly — see "
+                "src/desc_demo/sn_quality.py's module docstring for the "
+                "specific test cases that locked these numbers in."
+            )
+            quality = check_light_curve(light_curve)
+            if quality.is_fittable:
+                st.success("Passes all checks — worth handing to Stage 4's SALT2 fit.")
+            else:
+                st.error("Not fittable:\n" + "\n".join(f"- {r}" for r in quality.reasons))

@@ -12,3 +12,4 @@ pyarrow
 requests
 streamlit
 pillow
+sncosmo
