@@ -193,6 +193,16 @@ if candidates is not None:
                     st.error("Fit did not converge.")
                 else:
                     st.write(f"χ²/dof = {fit.chisq:.2f} / {fit.ndof} = {fit.chisq/fit.ndof:.2f}")
+                    if fit.n_dropped_out_of_range:
+                        st.caption(
+                            f"{fit.n_dropped_out_of_range} point(s) excluded "
+                            f"from the fit — outside SALT2's calibrated "
+                            f"phase range (-20 to +50 rest-frame days "
+                            f"around peak). They'll still show up in the "
+                            f"plot below with large pulls; that's expected "
+                            f"and doesn't count against χ²/dof above — see "
+                            f"SALT2_MIN_PHASE/MAX_PHASE in sn_fitting.py."
+                        )
                     cols = st.columns(4)
                     for col, name in zip(cols, ["t0", "x0", "x1", "c"]):
                         # delta_color="off": this is an uncertainty, not a
