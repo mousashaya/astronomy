@@ -1,0 +1,26 @@
+======================================================================
+BTSbot v1.0.1 reproduction -- ZTF published test set
+======================================================================
+
+49732 alerts, 1999 unique objects, threshold=0.5
+TensorFlow 2.21.0, run 2026-08-28 19:43
+
+--- Per-alert (matches paper's likely unit) ---
+Metric         Reproduced     Published      
+Accuracy       95.17          94.10          
+Completeness   91.41          100.00         
+Purity         93.04          84.0-93.0      
+ROC-AUC        0.9864         0.984          
+
+Confusion matrix (alert-level): TP=14240 TN=33089 FP=1065 FN=1338
+
+--- Per-object (best score per objectId) ---
+Accuracy=91.85  Completeness=99.80  Purity=75.89
+Confusion matrix (object-level): TP=510 FP=162 FN=1
+
+--- Threshold sensitivity (alert-level) ---
+threshold   completeness   purity    
+0.3         94.77          84.55     
+0.5         91.41          93.04     
+0.7         87.94          95.78     
+0.9         79.89          98.01     
