@@ -3,12 +3,16 @@ archived alert, not just the latest one) for a single object, and shape
 it into the format sncosmo's SALT2 fitter expects — that's Stage 4, but
 getting the columns right now means Stage 4 needs no further reshaping.
 """
+import hashlib
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
 
-from desc_demo.config import FINK_ZTF_API_URL
+from desc_demo.config import FINK_ZTF_API_URL, RAW_DIR
+from desc_demo.sn_cutouts import FinkUnavailable
 
 # Conventional ZTF band colors (roughly matching what Fink's own plots
 # and most ZTF papers use), so this is visually consistent with anything
@@ -39,7 +43,16 @@ _LIGHT_CURVE_COLUMNS = [
 ]
 
 
-def fetch_light_curve(object_id: str) -> pd.DataFrame:
+def _cache_path(object_id: str) -> Path:
+    # Same pattern as sn_discovery.py's TNS cache: keyed by a hash of the
+    # object id, parquet on the external volume. Added specifically to
+    # support a slow overnight prefetch (see scripts/prefetch_light_curves.py)
+    # — without this, every rerun of any stage re-hits Fink for every object.
+    digest = hashlib.sha1(object_id.encode()).hexdigest()[:10]
+    return RAW_DIR / f"lightcurve_{digest}.parquet"
+
+
+def fetch_light_curve(object_id: str, use_cache: bool = True) -> pd.DataFrame:
     """Pull every archived alert for `object_id` and reshape into a
     light curve table, one row per (time, band) detection.
 
@@ -47,15 +60,31 @@ def fetch_light_curve(object_id: str) -> pd.DataFrame:
     newest alert, for the image view), this keeps *all* of them — the
     whole point of Stage 2 is the time series.
     """
-    response = requests.post(
-        f"{FINK_ZTF_API_URL}/objects",
-        json={"objectId": object_id, "output-format": "json"},
-        timeout=45,
-    )
-    response.raise_for_status()
+    cache_file = _cache_path(object_id)
+    if use_cache and cache_file.exists():
+        return pd.read_parquet(cache_file)
+
+    try:
+        response = requests.post(
+            f"{FINK_ZTF_API_URL}/objects",
+            json={"objectId": object_id, "output-format": "json"},
+            timeout=45,
+        )
+    except requests.exceptions.RequestException as exc:
+        # Same distinction sn_cutouts.py makes: a network/server failure
+        # (confirmed real during a full-batch run — one object hit a 502)
+        # is not the same thing as "this object has no data", so it must
+        # not be cached as an empty result.
+        raise FinkUnavailable(str(exc)) from exc
+
+    if response.status_code != 200:
+        raise FinkUnavailable(f"HTTP {response.status_code}: {response.text[:200]}")
+
     rows = response.json()
     if not rows:
-        return pd.DataFrame(columns=_LIGHT_CURVE_COLUMNS)
+        empty = pd.DataFrame(columns=_LIGHT_CURVE_COLUMNS)
+        empty.to_parquet(cache_file)
+        return empty
 
     table = pd.DataFrame(rows)
 
@@ -82,7 +111,9 @@ def fetch_light_curve(object_id: str) -> pd.DataFrame:
         "rb": table["i:rb"].astype(float),
     })
 
-    return light_curve.sort_values("time").reset_index(drop=True)
+    light_curve = light_curve.sort_values("time").reset_index(drop=True)
+    light_curve.to_parquet(cache_file)
+    return light_curve
 
 
 def plot_light_curve(light_curve: pd.DataFrame, title: str = "") -> plt.Figure:
