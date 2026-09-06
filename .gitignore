@@ -1,7 +1,11 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-btsbot/
 *.egg-info/
 data/
 .DS_Store
 debugging/
+docs/papers/*.pdf
+btsbot_eval/models/
+.vscode/
